@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>AWSWebhookService</members>
+        <members>AWSWebhookQueueable</members>
+        <members>AWSWebhookServiceTest</members>
+        <name>ApexClass</name>
+    </types>
+    <types>
+        <members>AWS_Integration_Setting__mdt</members>
+        <name>CustomObject</name>
+    </types>
+    <types>
+        <members>AWS_Integration_Setting__mdt.Active__c</members>
+        <members>AWS_Integration_Setting__mdt.Endpoint_Named_Credential__c</members>
+        <members>AWS_Integration_Setting__mdt.Secret_Key__c</members>
+        <members>AWS_Integration_Setting__mdt.Timeout_Milliseconds__c</members>
+        <members>AWS_Integration_Setting__mdt.Webhook_Path__c</members>
+        <name>CustomField</name>
+    </types>
+    <types>
+        <members>AWS_Trigger_Webhook_From_Case</members>
+        <name>Flow</name>
+    </types>
+    <types>
+        <members>AWS_External_Credential_Principal_Access</members>
+        <name>PermissionSet</name>
+    </types>
+    <version>66.0</version>
+</Package>

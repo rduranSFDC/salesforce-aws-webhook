@@ -3,8 +3,8 @@ set -euo
 setopt pipefail
 
 # Defaults (can be overridden via env or args)
-WEBHOOK_URL="${WEBHOOK_URL:-https://event-ai.us-east-1.api.aws/webhook/generic/c8e33a91-41d2-457f-80d5-918fac509034}"
-SECRET="${SECRET:-MY-SECRET}"
+WEBHOOK_URL="${WEBHOOK_URL:-https://your-api-gateway.amazonaws.com/webhook/generic/YOUR-UUID}"
+SECRET="${SECRET:-YOUR-SECRET-KEY}"
 ACTION="created"
 PRIORITY="HIGH"
 TITLE="Test Alert"

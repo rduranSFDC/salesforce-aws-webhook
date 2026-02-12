@@ -1,8 +1,8 @@
 #!/bin/bash
 # WEBHOOK_URL=https://event-ai.us-east-1.api.aws/webhook/generic/c8e33a91-41d2-457f-80d5-918fac509034
 # SECRET="MY-SECRET"
-WEBHOOK_URL="https://event-ai.us-east-1.api.aws/webhook/generic/6a14950d-4556-4b7e-adf5-802fcbdfc614"
-SECRET="5oEhntph6fBbuOXX0fC00INRW95OEQj84vBPXOHcDhc="
+WEBHOOK_URL="https://your-api-gateway.amazonaws.com/webhook/generic/YOUR-UUID"
+SECRET="YOUR-SECRET-KEY"
 
 # Create payload
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S.000Z")

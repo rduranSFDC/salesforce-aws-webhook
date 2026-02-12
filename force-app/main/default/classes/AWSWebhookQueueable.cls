@@ -1,9 +1,10 @@
 /**
- * @description Queueable class that performs HMAC-signed HTTP callouts to AWS webhooks.
- *              Handles payload construction, signature generation, and response processing.
+ * @description Queueable callout engine that performs HMAC-signed HTTP callouts to AWS webhooks.
+ *              Delegates payload construction and response handling to pluggable strategies
+ *              configured via Custom Metadata (Payload_Builder_Class__c, Response_Handler_Class__c).
  * @author Rodrigo Duran
- * @date    2026-02-03  Initial version for AWS Webhook Service and Queueable
- * 
+ * @date   2026-02-03  Initial version
+ * @date   2026-02-07  Refactored to Strategy Pattern for multi-service support
  */
 public class AWSWebhookQueueable implements Queueable, Database.AllowsCallouts {
     
@@ -30,7 +31,8 @@ public class AWSWebhookQueueable implements Queueable, Database.AllowsCallouts {
     }
     
     /**
-     * @description Execute method called by the Queueable framework
+     * @description Execute method called by the Queueable framework.
+     *              Orchestrates: config lookup -> payload building -> signing -> callout -> response handling
      * @param context The QueueableContext provided by the system
      */
     public void execute(QueueableContext context) {
@@ -54,34 +56,26 @@ public class AWSWebhookQueueable implements Queueable, Database.AllowsCallouts {
                 );
             }
             
-            // Query the Case record
-            Case caseRecord = getCaseRecord(this.recordId);
-            
-            if (caseRecord == null) {
-                throw new AWSWebhookService.AWSWebhookException(
-                    'Case not found: ' + this.recordId
-                );
-            }
+            // Dynamically instantiate the payload builder from Custom Metadata
+            AWSWebhookPayloadBuilder builder = 
+                (AWSWebhookPayloadBuilder) Type.forName(config.Payload_Builder_Class__c).newInstance();
+            String payload = builder.buildPayload(this.recordId, this.eventContext);
             
             // Generate ISO 8601 timestamp
             String timestamp = Datetime.now().formatGmt('yyyy-MM-dd\'T\'HH:mm:ss\'Z\'');
             
-            // Build the JSON payload
-            String payload = buildPayload(caseRecord, this.eventContext);
-            System.debug(LoggingLevel.DEBUG, 'Payload: ' + payload);
-            System.debug(LoggingLevel.DEBUG, 'Timestamp: ' + timestamp);
-            System.debug(LoggingLevel.DEBUG, 'Secret Key: ' + config.Secret_Key__c);    
-            System.debug(LoggingLevel.DEBUG, 'Endpoint: ' + config.Endpoint_Named_Credential__c + config.Webhook_Path__c);
             // Generate HMAC-SHA256 signature
             String signature = generateSignature(timestamp, payload, config.Secret_Key__c);
-            System.debug(LoggingLevel.DEBUG, 'Signature: ' + signature);
+            
             // Make the HTTP callout
             HttpResponse response = makeCallout(config, timestamp, signature, payload);
-            System.debug(LoggingLevel.DEBUG, 'Response: ' + response.getBody());  
+            
             // Process response
             if (response.getStatusCode() >= 200 && response.getStatusCode() < 300) {
                 isSuccess = true;
-                resultMessage = 'Webhook called successfully. Status: ' + response.getStatusCode();
+                resultMessage = 'Webhook called successfully. Status: ' + response.getStatusCode() + 
+                    ', \n\nBody: ' + response.getBody() +
+                    ', \n\nPayload: ' + payload;
                 
                 // Try to extract request ID from response
                 try {
@@ -95,17 +89,22 @@ public class AWSWebhookQueueable implements Queueable, Database.AllowsCallouts {
             } else {
                 isSuccess = false;
                 resultMessage = 'Webhook call failed. Status: ' + response.getStatusCode() + 
-                               ', Body: ' + response.getBody().left(500);
+                                ', \n\nBody: ' + response.getBody() +
+                                ', \n\nPayload: ' + payload;
                 System.debug(LoggingLevel.DEBUG, 'Result Message: ' + resultMessage);
             }
+            
+            // Dynamically instantiate the response handler from Custom Metadata
+            AWSWebhookResponseHandler handler = 
+                (AWSWebhookResponseHandler) Type.forName(config.Response_Handler_Class__c).newInstance();
+            handler.handleResponse(this.recordId, isSuccess, requestId, resultMessage);
             
         } catch (Exception e) {
             isSuccess = false;
             resultMessage = 'Error: ' + e.getMessage();
+            // Attempt to log the error even if the main flow failed
+            System.debug(LoggingLevel.ERROR, 'AWSWebhookQueueable error: ' + resultMessage);
         }
-        
-        // Update the Case record with integration result
-        updateCaseWithResult(this.recordId, requestId, isSuccess, resultMessage);
     }
     
     /**
@@ -122,98 +121,14 @@ public class AWSWebhookQueueable implements Queueable, Database.AllowsCallouts {
                 Secret_Key__c,
                 Webhook_Path__c,
                 Active__c,
-                Timeout_Milliseconds__c
+                Timeout_Milliseconds__c,
+                Payload_Builder_Class__c,
+                Response_Handler_Class__c
             FROM AWS_Integration_Setting__mdt
             WHERE DeveloperName = :configName
             LIMIT 1
         ];
-        System.debug(LoggingLevel.DEBUG, 'Configurations: ' + configs);
         return configs.isEmpty() ? null : configs[0];
-    }
-    
-    /**
-     * @description Query the Case record for the payload
-     * @param caseId The Case ID to query
-     * @return The Case record or null if not found
-     */
-    @TestVisible
-    private Case getCaseRecord(String caseId) {
-        List<Case> cases = [
-            SELECT 
-                Id,
-                CaseNumber,
-                Subject,
-                Description,
-                Status,
-                Priority,
-                Origin,
-                Type,
-                ContactId,
-                Contact.Name,
-                Contact.Email,
-                AccountId,
-                Account.Name,
-                CreatedDate,
-                LastModifiedDate,
-                OwnerId
-            FROM Case
-            WHERE Id = :caseId
-            LIMIT 1
-        ];
-        
-        return cases.isEmpty() ? null : cases[0];
-    }
-    
-    /**
-     * @description Build the JSON payload for the webhook
-     * @param caseRecord The Case record to include in the payload
-     * @param eventContext The event context (e.g., CaseCreate, CaseUpdate)
-     * @return JSON string payload
-     */
-    @TestVisible
-    private String buildPayload(Case caseRecord, String eventContext) {
-        Map<String, Object> payload = new Map<String, Object>();
-        
-        // Event metadata
-        payload.put('eventType', eventContext);
-        payload.put('eventTimestamp', Datetime.now().formatGmt('yyyy-MM-dd\'T\'HH:mm:ss\'Z\''));
-        payload.put('sourceSystem', 'Salesforce');
-        payload.put('orgId', UserInfo.getOrganizationId());
-        
-        // Case data
-        Map<String, Object> caseData = new Map<String, Object>();
-        caseData.put('id', caseRecord.Id);
-        caseData.put('caseNumber', caseRecord.CaseNumber);
-        caseData.put('subject', caseRecord.Subject);
-        caseData.put('description', caseRecord.Description);
-        caseData.put('status', caseRecord.Status);
-        caseData.put('priority', caseRecord.Priority);
-        caseData.put('origin', caseRecord.Origin);
-        caseData.put('type', caseRecord.Type);
-        caseData.put('ownerId', caseRecord.OwnerId);
-        caseData.put('createdDate', caseRecord.CreatedDate?.formatGmt('yyyy-MM-dd\'T\'HH:mm:ss\'Z\''));
-        caseData.put('lastModifiedDate', caseRecord.LastModifiedDate?.formatGmt('yyyy-MM-dd\'T\'HH:mm:ss\'Z\''));
-        
-        // Contact data if available
-        if (caseRecord.ContactId != null) {
-            Map<String, Object> contactData = new Map<String, Object>();
-            contactData.put('id', caseRecord.ContactId);
-            contactData.put('name', caseRecord.Contact?.Name);
-            contactData.put('email', caseRecord.Contact?.Email);
-            caseData.put('contact', contactData);
-        }
-        
-        // Account data if available
-        if (caseRecord.AccountId != null) {
-            Map<String, Object> accountData = new Map<String, Object>();
-            accountData.put('id', caseRecord.AccountId);
-            accountData.put('name', caseRecord.Account?.Name);
-            caseData.put('account', accountData);
-        }
-        
-        payload.put('case', caseData);
-        
-        return JSON.serialize(payload);
     }
     
     /**
@@ -225,7 +140,6 @@ public class AWSWebhookQueueable implements Queueable, Database.AllowsCallouts {
      */
     @TestVisible
     private String generateSignature(String timestamp, String payload, String secret) {
-        // Signature format: HMAC-SHA256(timestamp + ":" + payload, secret)
         String dataToSign = timestamp + ':' + payload;
         Blob hmacData = Crypto.generateMac(
             'HmacSHA256',
@@ -266,7 +180,7 @@ public class AWSWebhookQueueable implements Queueable, Database.AllowsCallouts {
         Integer timeout = config.Timeout_Milliseconds__c != null 
             ? Integer.valueOf(config.Timeout_Milliseconds__c) 
             : 30000;
-        timeout = Math.max(1, Math.min(timeout, 120000)); // Enforce 1-120000ms range
+        timeout = Math.max(1, Math.min(timeout, 120000));
         request.setTimeout(timeout);
         
         // Set body
@@ -275,44 +189,5 @@ public class AWSWebhookQueueable implements Queueable, Database.AllowsCallouts {
         // Make the callout
         Http http = new Http();
         return http.send(request);
-    }
-    
-    /**
-     * @description Update the Case record with integration result
-     * @param caseId The Case ID to update
-     * @param requestId The AWS request ID if available
-     * @param isSuccess Whether the callout was successful
-     * @param message Status or error message
-     */
-    @TestVisible
-    private void updateCaseWithResult(String caseId, String requestId, Boolean isSuccess, String message) {
-        try {
-            String commentBody = '[AWS Webhook Integration - ' + 
-                                Datetime.now().format('yyyy-MM-dd HH:mm:ss') + ']\n' +
-                                'Status: ' + (isSuccess ? 'Success' : 'Failed') + '\n' +
-                                'Message: ' + message.left(500);
-            
-            if (String.isNotBlank(requestId)) {
-                commentBody += '\nRequest ID: ' + requestId;
-            }
-            
-            CaseComment comment = new CaseComment(
-                ParentId = caseId,
-                CommentBody = commentBody,
-                IsPublished = false  
-            );
-            insert comment;
-            
-            FeedItem post = new FeedItem(
-                ParentId = caseId,
-                Body = commentBody
-            );
-            insert post;
-            
-            System.debug(LoggingLevel.INFO, 'Created CaseComment and FeedItem for Case ' + caseId);
-            
-        } catch (Exception e) {
-            System.debug(LoggingLevel.ERROR, 'Failed to create CaseComment: ' + e.getMessage());
-        }
     }
 }

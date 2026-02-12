@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Configuration
-WEBHOOK_URL="https://event-ai.us-east-1.api.aws/webhook/generic/6a14950d-4556-4b7e-adf5-802fcbdfc614"
-SECRET="5oEhntph6fBbuOXX0fC00INRW95OEQj84vBPXOHcDhc="
+WEBHOOK_URL="https://your-api-gateway.amazonaws.com/webhook/generic/YOUR-UUID"
+SECRET="YOUR-SECRET-KEY"
 
 # Parse command line arguments
 INCIDENT_ID="${1:-test-alert-$(date +%s)}"

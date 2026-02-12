@@ -1,7 +1,9 @@
 /**
- * @description Test class for AWSWebhookService and AWSWebhookQueueable
+ * @description Test class for AWSWebhookService, AWSWebhookQueueable,
+ *              payload builders, and response handlers.
  * @author  Rodrigo Duran
- * @date    2026-02-03  Initial version for AWS Webhook Service and Queueable  Test Coverage
+ * @date    2026-02-03  Initial version
+ * @date    2026-02-07  Updated for Strategy Pattern refactoring
  */
 @isTest
 private class AWSWebhookServiceTest {
@@ -36,7 +38,7 @@ private class AWSWebhookServiceTest {
     }
     
     /**
-     * @description Mock HTTP callout class that verifies request headers
+     * @description Mock HTTP callout class that verifies request headers and payload structure
      */
     private class MockHttpResponseWithValidation implements HttpCalloutMock {
         public HTTPResponse respond(HTTPRequest req) {
@@ -55,7 +57,6 @@ private class AWSWebhookServiceTest {
             // Parse and validate payload structure
             Map<String, Object> payload = (Map<String, Object>) JSON.deserializeUntyped(body);
             System.assert(payload.containsKey('eventType'), 'Payload should contain eventType');
-            System.assert(payload.containsKey('case'), 'Payload should contain case data');
             
             HttpResponse res = new HttpResponse();
             res.setHeader('Content-Type', 'application/json');
@@ -71,13 +72,11 @@ private class AWSWebhookServiceTest {
      */
     private static Case createTestCase() {
         try {
-            // Create test Account
             Account testAccount = new Account(
                 Name = 'Test Account for AWS Webhook'
             );
             insert testAccount;
             
-            // Create test Contact
             Contact testContact = new Contact(
                 FirstName = 'Test',
                 LastName = 'Contact',
@@ -86,7 +85,6 @@ private class AWSWebhookServiceTest {
             );
             insert testContact;
             
-            // Create test Case
             Case testCase = new Case(
                 Subject = 'Test Case for AWS Webhook',
                 Description = 'This is a test case for webhook integration',
@@ -101,16 +99,17 @@ private class AWSWebhookServiceTest {
             
             return testCase;
         } catch (DmlException e) {
-            // Case creation may fail due to org automation (Flows, Process Builders)
-            // Return null and let individual tests handle this gracefully
             System.debug(LoggingLevel.WARN, 'Could not create test Case due to org automation: ' + e.getMessage());
             return null;
         }
     }
     
+    // ==========================================
+    // AWSWebhookService Invocable Method Tests
+    // ==========================================
+    
     /**
      * @description Test successful invocable method execution with mock ID
-     *              Tests the enqueue logic without requiring a real Case
      */
     @isTest
     static void testTriggerWebhookSuccess() {
@@ -176,14 +175,14 @@ private class AWSWebhookServiceTest {
     }
     
     /**
-     * @description Test invocable method with AWS_DevOps_Agent configuration name | Default behavior
+     * @description Test invocable method with default configuration name
      */
     @isTest
     static void testTriggerWebhookDefaultConfig() {
         AWSWebhookService.WebhookRequest request = new AWSWebhookService.WebhookRequest();
         request.recordId = MOCK_CASE_ID;
         request.context = 'CaseUpdate';
-        // Not setting configurationName to test AWS_DevOps_Agent behavior
+        // Not setting configurationName to test AWS_DevOps_Agent default
         
         Test.startTest();
         List<AWSWebhookService.WebhookResult> results = AWSWebhookService.triggerWebhook(
@@ -193,120 +192,6 @@ private class AWSWebhookServiceTest {
         
         System.assertEquals(1, results.size(), 'Should return one result');
         System.assertEquals(true, results[0].isSuccess, 'Should be successful');
-    }
-    
-    /**
-     * @description Test HMAC signature generation
-     *              This test does not require any DML operations
-     */
-    @isTest
-    static void testGenerateSignature() {
-        String timestamp = '2024-01-15T10:30:00Z';
-        String payload = '{"test": "data"}';
-        String secret = 'test-secret-key';
-        
-        Test.startTest();
-        String signature = generateTestSignature(timestamp, payload, secret);
-        Test.stopTest();
-        
-        System.assertNotEquals(null, signature, 'Signature should not be null');
-        System.assert(signature.length() > 0, 'Signature should not be empty');
-        
-        // Verify signature is consistent (same input = same output)
-        String signature2 = generateTestSignature(timestamp, payload, secret);
-        System.assertEquals(signature, signature2, 'Signatures should be consistent');
-    }
-    
-    /**
-     * @description Helper method to test signature generation
-     */
-    private static String generateTestSignature(String timestamp, String payload, String secret) {
-        String dataToSign = timestamp + ':' + payload;
-        Blob hmacData = Crypto.generateMac(
-            'HmacSHA256',
-            Blob.valueOf(dataToSign),
-            Blob.valueOf(secret)
-        );
-        return EncodingUtil.base64Encode(hmacData);
-    }
-    
-    /**
-     * @description Test payload construction
-     *              Uses in-memory Case object (no DML)
-     */
-    @isTest
-    static void testBuildPayload() {
-        // Create in-memory Case object without inserting
-        // Note: CaseNumber is auto-generated and read-only, so we don't set it
-        Case testCase = new Case(
-            Id = MOCK_CASE_ID,
-            Subject = 'Test Subject',
-            Description = 'Test Description',
-            Status = 'New',
-            Priority = 'Medium',
-            Origin = 'Web',
-            Type = 'Problem'
-        );
-        
-        Test.startTest();
-        String payload = buildTestPayload(testCase, 'CaseCreate');
-        Test.stopTest();
-        
-        System.assertNotEquals(null, payload, 'Payload should not be null');
-        
-        // Parse and validate
-        Map<String, Object> payloadMap = (Map<String, Object>) JSON.deserializeUntyped(payload);
-        System.assertEquals('CaseCreate', payloadMap.get('eventType'), 
-            'Event type should match');
-        System.assertEquals('Salesforce', payloadMap.get('sourceSystem'), 
-            'Source system should be Salesforce');
-        System.assertNotEquals(null, payloadMap.get('case'), 
-            'Case data should be present');
-        
-        Map<String, Object> caseData = (Map<String, Object>) payloadMap.get('case');
-        System.assertEquals(testCase.Subject, caseData.get('subject'), 
-            'Subject should match');
-    }
-    
-    /**
-     * @description Helper method to test payload building
-     */
-    private static String buildTestPayload(Case caseRecord, String eventContext) {
-        Map<String, Object> payload = new Map<String, Object>();
-        payload.put('eventType', eventContext);
-        payload.put('eventTimestamp', Datetime.now().formatGmt('yyyy-MM-dd\'T\'HH:mm:ss\'Z\''));
-        payload.put('sourceSystem', 'Salesforce');
-        payload.put('orgId', UserInfo.getOrganizationId());
-        
-        Map<String, Object> caseData = new Map<String, Object>();
-        caseData.put('id', caseRecord.Id);
-        caseData.put('caseNumber', caseRecord.CaseNumber);
-        caseData.put('subject', caseRecord.Subject);
-        caseData.put('description', caseRecord.Description);
-        caseData.put('status', caseRecord.Status);
-        caseData.put('priority', caseRecord.Priority);
-        caseData.put('origin', caseRecord.Origin);
-        caseData.put('type', caseRecord.Type);
-        caseData.put('ownerId', caseRecord.OwnerId);
-        
-        if (caseRecord.ContactId != null) {
-            Map<String, Object> contactData = new Map<String, Object>();
-            contactData.put('id', caseRecord.ContactId);
-            contactData.put('name', caseRecord.Contact?.Name);
-            contactData.put('email', caseRecord.Contact?.Email);
-            caseData.put('contact', contactData);
-        }
-        
-        if (caseRecord.AccountId != null) {
-            Map<String, Object> accountData = new Map<String, Object>();
-            accountData.put('id', caseRecord.AccountId);
-            accountData.put('name', caseRecord.Account?.Name);
-            caseData.put('account', accountData);
-        }
-        
-        payload.put('case', caseData);
-        
-        return JSON.serialize(payload);
     }
     
     /**
@@ -329,10 +214,35 @@ private class AWSWebhookServiceTest {
         Test.stopTest();
         
         System.assertEquals(5, results.size(), 'Should return 5 results');
-        
         for (AWSWebhookService.WebhookResult result : results) {
             System.assertEquals(true, result.isSuccess, 'Each request should be successful');
         }
+    }
+    
+    /**
+     * @description Test mixed valid and invalid requests
+     */
+    @isTest
+    static void testMixedRequests() {
+        List<AWSWebhookService.WebhookRequest> requests = new List<AWSWebhookService.WebhookRequest>();
+        
+        AWSWebhookService.WebhookRequest validRequest = new AWSWebhookService.WebhookRequest();
+        validRequest.recordId = MOCK_CASE_ID;
+        validRequest.context = 'CaseCreate';
+        requests.add(validRequest);
+        
+        AWSWebhookService.WebhookRequest invalidRequest = new AWSWebhookService.WebhookRequest();
+        invalidRequest.recordId = '';
+        invalidRequest.context = 'CaseCreate';
+        requests.add(invalidRequest);
+        
+        Test.startTest();
+        List<AWSWebhookService.WebhookResult> results = AWSWebhookService.triggerWebhook(requests);
+        Test.stopTest();
+        
+        System.assertEquals(2, results.size(), 'Should return 2 results');
+        System.assertEquals(true, results[0].isSuccess, 'First request should succeed');
+        System.assertEquals(false, results[1].isSuccess, 'Second request should fail');
     }
     
     /**
@@ -350,9 +260,12 @@ private class AWSWebhookServiceTest {
         Test.stopTest();
     }
     
+    // ==========================================
+    // AWSWebhookQueueable Tests
+    // ==========================================
+    
     /**
      * @description Test Queueable execution with mock callout - success scenario
-     *              Uses mock ID since Queueable will fail gracefully without real config
      */
     @isTest
     static void testQueueableExecutionSuccess() {
@@ -365,11 +278,9 @@ private class AWSWebhookServiceTest {
         );
         
         Test.startTest();
-        // The Queueable will fail gracefully (no config found) but tests execution flow
         System.enqueueJob(queueable);
         Test.stopTest();
         
-        // Verify no unhandled exceptions occurred
         System.assert(true, 'Queueable should complete without throwing');
     }
     
@@ -390,41 +301,46 @@ private class AWSWebhookServiceTest {
         System.enqueueJob(queueable);
         Test.stopTest();
         
-        // Verify no unhandled exceptions occurred
         System.assert(true, 'Queueable should handle failure gracefully');
     }
     
+    // ==========================================
+    // HMAC Signature Tests
+    // ==========================================
+    
     /**
-     * @description Test mixed valid and invalid requests
+     * @description Test HMAC signature generation
      */
     @isTest
-    static void testMixedRequests() {
-        List<AWSWebhookService.WebhookRequest> requests = new List<AWSWebhookService.WebhookRequest>();
-        
-        // Valid request
-        AWSWebhookService.WebhookRequest validRequest = new AWSWebhookService.WebhookRequest();
-        validRequest.recordId = MOCK_CASE_ID;
-        validRequest.context = 'CaseCreate';
-        requests.add(validRequest);
-        
-        // Invalid request - missing record ID
-        AWSWebhookService.WebhookRequest invalidRequest = new AWSWebhookService.WebhookRequest();
-        invalidRequest.recordId = '';
-        invalidRequest.context = 'CaseCreate';
-        requests.add(invalidRequest);
+    static void testGenerateSignature() {
+        String timestamp = '2024-01-15T10:30:00Z';
+        String payload = '{"test": "data"}';
+        String secret = 'test-secret-key';
         
         Test.startTest();
-        List<AWSWebhookService.WebhookResult> results = AWSWebhookService.triggerWebhook(requests);
+        String signature = generateTestSignature(timestamp, payload, secret);
         Test.stopTest();
         
-        System.assertEquals(2, results.size(), 'Should return 2 results');
-        System.assertEquals(true, results[0].isSuccess, 'First request should succeed');
-        System.assertEquals(false, results[1].isSuccess, 'Second request should fail');
+        System.assertNotEquals(null, signature, 'Signature should not be null');
+        System.assert(signature.length() > 0, 'Signature should not be empty');
+        
+        // Verify signature is consistent (same input = same output)
+        String signature2 = generateTestSignature(timestamp, payload, secret);
+        System.assertEquals(signature, signature2, 'Signatures should be consistent');
+    }
+    
+    private static String generateTestSignature(String timestamp, String payload, String secret) {
+        String dataToSign = timestamp + ':' + payload;
+        Blob hmacData = Crypto.generateMac(
+            'HmacSHA256',
+            Blob.valueOf(dataToSign),
+            Blob.valueOf(secret)
+        );
+        return EncodingUtil.base64Encode(hmacData);
     }
     
     /**
      * @description Test timestamp format
-     *              This test does not require any DML operations
      */
     @isTest
     static void testTimestampFormat() {
@@ -432,22 +348,208 @@ private class AWSWebhookServiceTest {
         String timestamp = Datetime.now().formatGmt('yyyy-MM-dd\'T\'HH:mm:ss\'Z\'');
         Test.stopTest();
         
-        // Verify ISO 8601 format
         System.assert(timestamp.contains('T'), 'Should contain T separator');
         System.assert(timestamp.endsWith('Z'), 'Should end with Z');
         System.assertEquals(20, timestamp.length(), 'Should be 20 characters');
     }
     
+    // ==========================================
+    // AWSDevOpsAgentPayloadBuilder Tests
+    // ==========================================
+    
+    /**
+     * @description Test DevOps Agent payload builder with a real Case
+     */
+    @isTest
+    static void testDevOpsAgentPayloadBuilder() {
+        Case testCase = createTestCase();
+        
+        if (testCase == null) {
+            System.assert(true, 'Test skipped due to org automation');
+            return;
+        }
+        
+        Test.startTest();
+        AWSWebhookPayloadBuilder builder = new AWSDevOpsAgentPayloadBuilder();
+        String payload = builder.buildPayload(testCase.Id, 'CaseCreate');
+        Test.stopTest();
+        
+        System.assertNotEquals(null, payload, 'Payload should not be null');
+        
+        Map<String, Object> payloadMap = (Map<String, Object>) JSON.deserializeUntyped(payload);
+        System.assertEquals('incident', payloadMap.get('eventType'), 'eventType should be incident');
+        System.assertNotEquals(null, payloadMap.get('incidentId'), 'incidentId should be present');
+        System.assertEquals('created', payloadMap.get('action'), 'action should be created');
+        System.assertEquals('HIGH', payloadMap.get('priority'), 'priority should be HIGH');
+        System.assertNotEquals(null, payloadMap.get('title'), 'title should be present');
+        System.assertNotEquals(null, payloadMap.get('description'), 'description should be present');
+        System.assertNotEquals(null, payloadMap.get('timestamp'), 'timestamp should be present');
+    }
+    
+    /**
+     * @description Test DevOps Agent payload builder with invalid Case ID
+     */
+    @isTest
+    static void testDevOpsAgentPayloadBuilderInvalidCase() {
+        Test.startTest();
+        AWSWebhookPayloadBuilder builder = new AWSDevOpsAgentPayloadBuilder();
+        try {
+            builder.buildPayload(MOCK_CASE_ID, 'CaseCreate');
+            System.assert(false, 'Should have thrown AWSWebhookException');
+        } catch (AWSWebhookService.AWSWebhookException e) {
+            System.assert(e.getMessage().contains('Case not found'), 
+                'Exception should mention Case not found');
+        }
+        Test.stopTest();
+    }
+    
+    /**
+     * @description Test dynamic instantiation of payload builder via Type.forName
+     */
+    @isTest
+    static void testDynamicPayloadBuilderInstantiation() {
+        Test.startTest();
+        AWSWebhookPayloadBuilder builder = 
+            (AWSWebhookPayloadBuilder) Type.forName('AWSDevOpsAgentPayloadBuilder').newInstance();
+        Test.stopTest();
+        
+        System.assertNotEquals(null, builder, 'Builder should be instantiated dynamically');
+        System.assert(builder instanceof AWSDevOpsAgentPayloadBuilder, 
+            'Builder should be an instance of AWSDevOpsAgentPayloadBuilder');
+    }
+    
+    // ==========================================
+    // CaseFeedItemResponseHandler Tests
+    // ==========================================
+    
+    /**
+     * @description Test CaseFeedItem response handler creates a FeedItem on success
+     */
+    @isTest
+    static void testCaseFeedItemHandlerSuccess() {
+        Case testCase = createTestCase();
+        
+        if (testCase == null) {
+            System.assert(true, 'Test skipped due to org automation');
+            return;
+        }
+        
+        Test.startTest();
+        AWSWebhookResponseHandler handler = new CaseFeedItemResponseHandler();
+        handler.handleResponse(testCase.Id, true, 'req-123', 'Webhook called successfully');
+        Test.stopTest();
+        
+        List<FeedItem> feedItems = [
+            SELECT Id, Body, ParentId 
+            FROM FeedItem 
+            WHERE ParentId = :testCase.Id
+        ];
+        
+        System.assertEquals(1, feedItems.size(), 'Should have created one FeedItem');
+        System.assert(feedItems[0].Body.contains('Success'), 'FeedItem should contain Success');
+        System.assert(feedItems[0].Body.contains('req-123'), 'FeedItem should contain request ID');
+    }
+    
+    /**
+     * @description Test CaseFeedItem response handler creates a FeedItem on failure
+     */
+    @isTest
+    static void testCaseFeedItemHandlerFailure() {
+        Case testCase = createTestCase();
+        
+        if (testCase == null) {
+            System.assert(true, 'Test skipped due to org automation');
+            return;
+        }
+        
+        Test.startTest();
+        AWSWebhookResponseHandler handler = new CaseFeedItemResponseHandler();
+        handler.handleResponse(testCase.Id, false, null, 'Webhook call failed. Status: 500');
+        Test.stopTest();
+        
+        List<FeedItem> feedItems = [
+            SELECT Id, Body, ParentId 
+            FROM FeedItem 
+            WHERE ParentId = :testCase.Id
+        ];
+        
+        System.assertEquals(1, feedItems.size(), 'Should have created one FeedItem even on failure');
+        System.assert(feedItems[0].Body.contains('Failed'), 'FeedItem should contain Failed');
+    }
+    
+    /**
+     * @description Test dynamic instantiation of response handler via Type.forName
+     */
+    @isTest
+    static void testDynamicResponseHandlerInstantiation() {
+        Test.startTest();
+        AWSWebhookResponseHandler handler = 
+            (AWSWebhookResponseHandler) Type.forName('CaseFeedItemResponseHandler').newInstance();
+        Test.stopTest();
+        
+        System.assertNotEquals(null, handler, 'Handler should be instantiated dynamically');
+        System.assert(handler instanceof CaseFeedItemResponseHandler, 
+            'Handler should be an instance of CaseFeedItemResponseHandler');
+    }
+    
+    // ==========================================
+    // LogOnlyResponseHandler Tests
+    // ==========================================
+    
+    /**
+     * @description Test LogOnly response handler executes without error
+     */
+    @isTest
+    static void testLogOnlyHandlerSuccess() {
+        Test.startTest();
+        AWSWebhookResponseHandler handler = new LogOnlyResponseHandler();
+        handler.handleResponse(MOCK_CASE_ID, true, 'req-789', 'Webhook called successfully');
+        Test.stopTest();
+        
+        // No records created -- just verify no exceptions thrown
+        System.assert(true, 'LogOnlyResponseHandler should execute without errors');
+    }
+    
+    /**
+     * @description Test LogOnly response handler on failure path
+     */
+    @isTest
+    static void testLogOnlyHandlerFailure() {
+        Test.startTest();
+        AWSWebhookResponseHandler handler = new LogOnlyResponseHandler();
+        handler.handleResponse(MOCK_CASE_ID, false, null, 'Connection timeout');
+        Test.stopTest();
+        
+        System.assert(true, 'LogOnlyResponseHandler should handle failure without errors');
+    }
+    
+    /**
+     * @description Test dynamic instantiation of LogOnly handler via Type.forName
+     */
+    @isTest
+    static void testDynamicLogOnlyHandlerInstantiation() {
+        Test.startTest();
+        AWSWebhookResponseHandler handler = 
+            (AWSWebhookResponseHandler) Type.forName('LogOnlyResponseHandler').newInstance();
+        Test.stopTest();
+        
+        System.assertNotEquals(null, handler, 'Handler should be instantiated dynamically');
+        System.assert(handler instanceof LogOnlyResponseHandler, 
+            'Handler should be an instance of LogOnlyResponseHandler');
+    }
+    
+    // ==========================================
+    // Integration Tests with Real Case
+    // ==========================================
+    
     /**
      * @description Test with real Case if org automation allows
-     *              This test gracefully skips if Case creation fails
      */
     @isTest
     static void testWithRealCaseIfPossible() {
         Case testCase = createTestCase();
         
         if (testCase == null) {
-            // Skip this test if Case creation fails due to org automation
             System.debug('Skipping testWithRealCaseIfPossible - Case creation blocked by org automation');
             System.assert(true, 'Test skipped due to org automation');
             return;
@@ -466,95 +568,5 @@ private class AWSWebhookServiceTest {
         
         System.assertEquals(1, results.size(), 'Should return one result');
         System.assertEquals(true, results[0].isSuccess, 'Should be successful with real Case');
-    }
-    
-    /**
-     * @description Test that CaseComment is created with webhook result
-     *              This test verifies the updateCaseWithResult method creates a CaseComment
-     */
-    @isTest
-    static void testCaseCommentCreatedOnWebhookResult() {
-        Case testCase = createTestCase();
-        
-        if (testCase == null) {
-            // Skip this test if Case creation fails due to org automation
-            System.debug('Skipping testCaseCommentCreatedOnWebhookResult - Case creation blocked by org automation');
-            System.assert(true, 'Test skipped due to org automation');
-            return;
-        }
-        
-        // Set up mock for successful HTTP response
-        Test.setMock(HttpCalloutMock.class, new MockHttpResponseSuccess());
-        
-        // Verify no CaseComments exist initially
-        List<CaseComment> initialComments = [SELECT Id FROM CaseComment WHERE ParentId = :testCase.Id];
-        System.assertEquals(0, initialComments.size(), 'Should have no comments initially');
-        
-        AWSWebhookQueueable queueable = new AWSWebhookQueueable(
-            testCase.Id, 
-            'CaseCreate', 
-            'AWS_DevOps_Agent'
-        );
-        
-        Test.startTest();
-        System.enqueueJob(queueable);
-        Test.stopTest();
-        
-        // Query for CaseComments created on the test Case
-        List<CaseComment> comments = [
-            SELECT Id, CommentBody, IsPublished, ParentId 
-            FROM CaseComment 
-            WHERE ParentId = :testCase.Id
-        ];
-        
-        System.assertEquals(1, comments.size(), 'Should have created one CaseComment');
-        CaseComment comment = comments[0];
-        System.assertEquals(testCase.Id, comment.ParentId, 'Comment should be linked to the Case');
-        System.assertEquals(false, comment.IsPublished, 'Comment should be internal (not published)');
-        System.assert(comment.CommentBody.contains('[AWS Webhook Integration'), 
-            'Comment should contain integration header');
-        System.assert(comment.CommentBody.contains('Status:'), 
-            'Comment should contain status');
-    }
-    
-    /**
-     * @description Test that CaseComment is created even when webhook call fails
-     */
-    @isTest
-    static void testCaseCommentCreatedOnWebhookFailure() {
-        Case testCase = createTestCase();
-        
-        if (testCase == null) {
-            // Skip this test if Case creation fails due to org automation
-            System.debug('Skipping testCaseCommentCreatedOnWebhookFailure - Case creation blocked by org automation');
-            System.assert(true, 'Test skipped due to org automation');
-            return;
-        }
-        
-        // Set up mock for failed HTTP response
-        Test.setMock(HttpCalloutMock.class, new MockHttpResponseFailure());
-        
-        AWSWebhookQueueable queueable = new AWSWebhookQueueable(
-            testCase.Id, 
-            'CaseUpdate', 
-            'AWS_DevOps_Agent'
-        );
-        
-        Test.startTest();
-        System.enqueueJob(queueable);
-        Test.stopTest();
-        
-        // Query for CaseComments created on the test Case
-        List<CaseComment> comments = [
-            SELECT Id, CommentBody, IsPublished 
-            FROM CaseComment 
-            WHERE ParentId = :testCase.Id
-        ];
-        
-        System.assertEquals(1, comments.size(), 'Should have created one CaseComment even on failure');
-        CaseComment comment = comments[0];
-        System.assertEquals(false, comment.IsPublished, 'Comment should be internal');
-        System.assert(comment.CommentBody.contains('[AWS Webhook Integration'), 
-            'Comment should contain integration header');
     }
 }

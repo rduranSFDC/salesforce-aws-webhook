@@ -97,7 +97,7 @@
         </connector>
         <fields>
             <name>ConfirmationMessage</name>
-            <fieldText>&lt;p&gt;&lt;b&gt;Trigger AWS Webhook&lt;/b&gt;&lt;/p&gt;&lt;p&gt;This will send the Case data to the AWS webhook endpoint.&lt;/p&gt;&lt;p&gt;A Case Comment will be added with the result of the webhook call.&lt;/p&gt;&lt;p&gt;&lt;br&gt;&lt;/p&gt;&lt;p&gt;Do you want to proceed?&lt;/p&gt;</fieldText>
+            <fieldText>&lt;p&gt;&lt;b&gt;Trigger AWS Webhook&lt;/b&gt;&lt;/p&gt;&lt;p&gt;This will send the Case data to the AWS webhook endpoint.&lt;/p&gt;&lt;p&gt;A feed post will be added with the result of the webhook call.&lt;/p&gt;&lt;p&gt;&lt;br&gt;&lt;/p&gt;&lt;p&gt;Do you want to proceed?&lt;/p&gt;</fieldText>
             <fieldType>DisplayText</fieldType>
             <styleProperties>
                 <verticalAlignment>
@@ -172,7 +172,7 @@
         <allowPause>false</allowPause>
         <fields>
             <name>SuccessMessage</name>
-            <fieldText>&lt;p&gt;&lt;b style=&quot;color: rgb(46, 132, 74);&quot;&gt;Webhook Triggered Successfully&lt;/b&gt;&lt;/p&gt;&lt;p&gt;&lt;br&gt;&lt;/p&gt;&lt;p&gt;The AWS webhook has been triggered. A background job is processing the request.&lt;/p&gt;&lt;p&gt;&lt;br&gt;&lt;/p&gt;&lt;p&gt;&lt;b&gt;Job ID:&lt;/b&gt; {!Trigger_AWS_Webhook.jobId}&lt;/p&gt;&lt;p&gt;&lt;b&gt;Message:&lt;/b&gt; {!Trigger_AWS_Webhook.message}&lt;/p&gt;&lt;p&gt;&lt;br&gt;&lt;/p&gt;&lt;p&gt;A Case Comment with the webhook result will appear in the Case Feed shortly.&lt;/p&gt;</fieldText>
+            <fieldText>&lt;p&gt;&lt;b style=&quot;color: rgb(46, 132, 74);&quot;&gt;Webhook Triggered Successfully&lt;/b&gt;&lt;/p&gt;&lt;p&gt;&lt;br&gt;&lt;/p&gt;&lt;p&gt;The AWS webhook has been triggered. A background job is processing the request.&lt;/p&gt;&lt;p&gt;&lt;br&gt;&lt;/p&gt;&lt;p&gt;&lt;b&gt;Job ID:&lt;/b&gt; {!Trigger_AWS_Webhook.jobId}&lt;/p&gt;&lt;p&gt;&lt;b&gt;Message:&lt;/b&gt; {!Trigger_AWS_Webhook.message}&lt;/p&gt;&lt;p&gt;&lt;br&gt;&lt;/p&gt;&lt;p&gt;A feed post with the webhook result will appear in the Case Feed shortly.&lt;/p&gt;</fieldText>
             <fieldType>DisplayText</fieldType>
             <styleProperties>
                 <verticalAlignment>

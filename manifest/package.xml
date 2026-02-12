@@ -4,6 +4,11 @@
         <members>AWSWebhookService</members>
         <members>AWSWebhookQueueable</members>
         <members>AWSWebhookServiceTest</members>
+        <members>AWSWebhookPayloadBuilder</members>
+        <members>AWSWebhookResponseHandler</members>
+        <members>AWSDevOpsAgentPayloadBuilder</members>
+        <members>CaseFeedItemResponseHandler</members>
+        <members>LogOnlyResponseHandler</members>
         <name>ApexClass</name>
     </types>
     <types>
@@ -16,6 +21,8 @@
         <members>AWS_Integration_Setting__mdt.Secret_Key__c</members>
         <members>AWS_Integration_Setting__mdt.Timeout_Milliseconds__c</members>
         <members>AWS_Integration_Setting__mdt.Webhook_Path__c</members>
+        <members>AWS_Integration_Setting__mdt.Payload_Builder_Class__c</members>
+        <members>AWS_Integration_Setting__mdt.Response_Handler_Class__c</members>
         <name>CustomField</name>
     </types>
     <types>

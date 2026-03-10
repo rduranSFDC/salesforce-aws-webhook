@@ -1,11 +1,17 @@
 {
     "xml.preferences.showSchemaDocumentationType": "none",
     "files.exclude": {
+        "**/.apivcs": true,
+        "**/.gitignore": true,
         "**/.git": true,
-        "**/.svn": true,
-        "**/.hg": true,
-        "**/.DS_Store": true,
-        "**/Thumbs.db": true,
-        ".mule": true
-    }
+        "**/.designer.json": true,
+        "**/.exchange.xml": true,
+        "**/.vscode": true,
+        "**/.mvn": true,
+        "**/.tmp": true,
+        "**/.settings": true,
+        "**/.exchange_modules_tmp": true
+    },
+    "editor.acceptSuggestionOnEnter": "on",
+    "editor.wordBasedSuggestions": "off"
 }

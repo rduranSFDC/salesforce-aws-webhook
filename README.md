@@ -275,6 +275,56 @@ The Invocable Action appears in Flow Builder as:
 
 **Outputs:** `isSuccess`, `message`, `jobId`
 
+## Agentforce Action Configuration
+
+The `AWSWebhookService.triggerWebhook` invocable method is available as an Agentforce action. Configure it so agents can trigger webhooks from conversation (e.g., "Send this case to AWS" or "Escalate to the DevOps Agent").
+
+### 1. Create an Agent Action in Setup
+
+1. Go to **Setup > Agent Assets > Actions**
+2. Click **New Agent Action**
+3. Configure:
+   - **Reference Action Type:** Apex
+   - **Reference Action Category:** Invocable Methods
+   - **Reference Action:** `AWSWebhookService.triggerWebhook`
+   - **Agent Action Label:** e.g., `Trigger AWS Webhook` (or keep default)
+   - **API Name:** e.g., `Trigger_AWS_Webhook`
+
+Instruction fields are pre-populated from the Apex `@InvocableMethod` and `@InvocableVariable` descriptions.
+
+### 2. Add the Action to Your Agent
+
+1. Open **Agent Builder** (Setup > Agent Builder or the Agentforce app)
+2. Select or create an agent
+3. Go to **This Copilot's Actions** (or equivalent tab)
+4. Add the custom action from the **Copilot Action Library**
+5. Save the agent
+
+### 3. Configure Agent Instructions (Recommended)
+
+Add instructions so the agent knows when to use the action, for example:
+
+- "When the user asks to send a Case to AWS, trigger the DevOps webhook, or escalate to the DevOps Agent, use the Trigger AWS Webhook action."
+- "Pass the current Case ID as the Record ID and an appropriate context (e.g., `CaseCreate`, `CaseUpdate`, `ManualTrigger`)."
+
+### 4. Action Inputs and Context
+
+| Input | Required | Description |
+| --- | --- | --- |
+| `recordId` | Yes | Case or record ID (from conversation context or user-provided) |
+| `context` | Yes | Event context (e.g., `CaseCreate`, `CaseUpdate`, `ManualTrigger`) |
+| `configurationName` | No | Custom Metadata DeveloperName (defaults to `AWS_DevOps_Agent`) |
+
+Agentforce can pass record context when the user is on a record page. Ensure the agent has access to record context and that instructions describe how to map user intent to `context` values.
+
+### 5. Optional: Source-Controlled Agent Action Metadata
+
+Agent Actions use the **GenAiFunction** metadata type. To version the action configuration:
+
+1. Create the action in Setup (steps 1–2 above)
+2. Retrieve: `sf project retrieve start -m GenAiFunction`
+3. Commit the generated metadata for CI/CD deployment
+
 ## Security Considerations
 
 - **No hardcoded secrets:** HMAC secret stored in Custom Metadata, retrieved at runtime

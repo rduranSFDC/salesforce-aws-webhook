@@ -15,7 +15,9 @@ List<AWS_Integration_Setting__mdt> configs = [
         Secret_Key__c,
         Webhook_Path__c,
         Active__c,
-        Timeout_Milliseconds__c
+        Timeout_Milliseconds__c,
+        Payload_Builder_Class__c,
+        Response_Handler_Class__c
     FROM AWS_Integration_Setting__mdt
 ];
 
@@ -33,6 +35,8 @@ if (configs.isEmpty()) {
         System.debug('Webhook Path: ' + config.Webhook_Path__c);
         System.debug('Active: ' + config.Active__c);
         System.debug('Timeout (ms): ' + config.Timeout_Milliseconds__c);
+        System.debug('Payload Builder: ' + config.Payload_Builder_Class__c);
+        System.debug('Response Handler: ' + config.Response_Handler_Class__c);
         System.debug('Secret Key: ' + (String.isNotBlank(config.Secret_Key__c) ? '***configured***' : 'NOT SET'));
         System.debug('');
         
@@ -50,6 +54,12 @@ if (configs.isEmpty()) {
         }
         if (!config.Active__c) {
             issues.add('Configuration is INACTIVE');
+        }
+        if (String.isBlank(config.Payload_Builder_Class__c)) {
+            issues.add('Missing Payload Builder Class');
+        }
+        if (String.isBlank(config.Response_Handler_Class__c)) {
+            issues.add('Missing Response Handler Class');
         }
         
         if (!issues.isEmpty()) {
